@@ -1,0 +1,224 @@
+import React, { useState, useMemo } from 'react';
+import { Download, X, ArrowLeft } from 'lucide-react';
+import ResponsiveTable from './ResponsiveTable';
+import SearchBar from './SearchBar';
+import * as XLSX from 'xlsx';
+
+export default function DrilldownModal({ isOpen, onClose, title, summaryItems = [], headers, rows, filename = 'drilldown_export.xlsx', filterBar, tableMaxWidth = 'none', onRowClick, onBack, disablePills = false }) {
+  const [searchMap, setSearchMap] = useState({});
+  const [pageMap, setPageMap] = useState({});
+  const [directionFilter, setDirectionFilter] = useState('All'); // 'All', 'In', 'Out'
+
+  const currentKey = title ? String(title).trim() : 'root_drilldown';
+  const searchTerm = searchMap[currentKey] || '';
+  const activeModalPage = pageMap[currentKey] || 1;
+
+  // Reset search term, page maps and filter when closed
+  React.useEffect(() => {
+    if (!isOpen) {
+      setSearchMap({});
+      setPageMap({});
+      setDirectionFilter('All');
+    }
+  }, [isOpen]);
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchMap(prev => ({ ...prev, [currentKey]: val }));
+    setPageMap(prev => ({ ...prev, [currentKey]: 1 }));
+  };
+
+  const handlePageChange = (newPage) => {
+    setPageMap(prev => ({ ...prev, [currentKey]: newPage }));
+  };
+
+  const handleDirectionChange = (newDir) => {
+    setDirectionFilter(newDir);
+    setPageMap(prev => ({ ...prev, [currentKey]: 1 }));
+  };
+
+
+  // Filter rows based on direction filter and search term
+  const filteredRows = useMemo(() => {
+    let result = Array.isArray(rows) ? rows : [];
+
+    // Filter by direction if keys exist
+    if (result[0] && result[0].hasOwnProperty('qtyIn') && result[0].hasOwnProperty('qtyOut')) {
+      if (directionFilter === 'In') {
+        result = result.filter(r => r.qtyIn > 0);
+      } else if (directionFilter === 'Out') {
+        result = result.filter(r => r.qtyOut > 0);
+      }
+    }
+
+    if (!searchTerm.trim()) return result;
+    const term = searchTerm.toLowerCase().trim();
+    return result.filter((row) => {
+      if (!row) return false;
+      return Object.values(row).some((val) => {
+        if (val === null || val === undefined) return false;
+        return val.toString().toLowerCase().includes(term);
+      });
+    });
+  }, [rows, searchTerm, directionFilter]);
+
+  // Export to Excel helper
+  const handleExport = () => {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const safeHeaders = Array.isArray(headers) ? headers : [];
+    const ws = XLSX.utils.json_to_sheet(safeRows.map(r => {
+      const clean = {};
+      safeHeaders.forEach(h => {
+        clean[h.label] = r[h.key];
+      });
+      return clean;
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Detail");
+    XLSX.writeFile(wb, filename);
+  };
+
+  if (!isOpen) return null;
+
+  const showPills = !disablePills && !filterBar && rows[0] && rows[0].hasOwnProperty('qtyIn') && rows[0].hasOwnProperty('qtyOut');
+
+  return (
+    <div className="modal-overlay" style={{ display: 'flex' }} onClick={onClose}>
+      <div className="modal-content drilldown-card" onClick={(e) => e.stopPropagation()}>
+        <div className="drilldown-header" style={{ borderBottom: showPills || filterBar ? 'none' : '1px solid var(--border)', paddingBottom: showPills || filterBar ? '4px' : '12px' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {onBack && (
+              <button 
+                onClick={onBack}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', color: 'var(--accent, #3b82f6)' }}
+                title="ย้อนกลับ"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            {title}
+          </h3>
+          <div className="modal-header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <SearchBar 
+              value={searchTerm}
+              onChange={handleSearchChange}
+              placeholder="ค้นหาในตาราง..."
+              maxWidth="240px"
+            />
+            <button 
+              className="modal-action-btn" 
+              onClick={handleExport}
+              title="Export Excel"
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '4px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Download size={16} />
+            </button>
+            <button 
+              className="modal-action-btn" 
+              onClick={onClose}
+              title="Close" 
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '4px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Pills Filter Bar */}
+        {showPills && (
+          <div className="modal-pills-bar" style={{ display: 'flex', gap: '10px', padding: '8px 0 12px 0', borderBottom: '1px solid var(--border)', marginBottom: '12px' }}>
+            <button
+              onClick={() => handleDirectionChange('All')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 16px',
+                borderRadius: '50px',
+                border: directionFilter === 'All' ? '1.5px solid #2563eb' : '1px solid var(--border)',
+                backgroundColor: directionFilter === 'All' ? 'rgba(37, 99, 235, 0.1)' : 'var(--card-bg)',
+                color: directionFilter === 'All' ? '#2563eb' : 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563eb' }}></span>
+              ทั้งหมด (All)
+            </button>
+            <button
+              onClick={() => handleDirectionChange('In')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 16px',
+                borderRadius: '50px',
+                border: directionFilter === 'In' ? '1.5px solid #16a34a' : '1px solid var(--border)',
+                backgroundColor: directionFilter === 'In' ? 'rgba(22, 163, 74, 0.1)' : 'var(--card-bg)',
+                color: directionFilter === 'In' ? '#16a34a' : 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }}></span>
+              ขาเข้า (Inbound)
+            </button>
+            <button
+              onClick={() => handleDirectionChange('Out')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 16px',
+                borderRadius: '50px',
+                border: directionFilter === 'Out' ? '1.5px solid #dc2626' : '1px solid var(--border)',
+                backgroundColor: directionFilter === 'Out' ? 'rgba(220, 38, 38, 0.1)' : 'var(--card-bg)',
+                color: directionFilter === 'Out' ? '#dc2626' : 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }}></span>
+              ขาออก (Outbound)
+            </button>
+          </div>
+        )}
+
+        {/* Custom filters (e.g. YoY year tabs) */}
+        {filterBar}
+
+        {summaryItems.length > 0 && (
+          <div className="drilldown-summary-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid var(--border)', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {summaryItems.map((item, idx) => (
+                <div key={idx} style={{ fontSize: '0.9rem' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{item.label}: </span>
+                  <strong style={{ color: item.color }}>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="modal-table-wrapper" style={{ maxWidth: tableMaxWidth, margin: tableMaxWidth !== 'none' ? '0 auto' : '0', width: '100%', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+          <ResponsiveTable 
+            headers={headers} 
+            rows={filteredRows} 
+            itemsPerPage={11} 
+            minHeight="auto"
+            tabViewClass="drilldown-table-view"
+            onRowClick={onRowClick}
+            page={activeModalPage}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
