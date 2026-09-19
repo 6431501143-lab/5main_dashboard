@@ -10,10 +10,3 @@ Executive Inventory & Supply Chain Analytics Dashboard (Frontend-only สำห�
 5. **การจ่ายสินค้าไปคลัง (Outbound Dispatch)**
 
 ---
-
-"deploy": "vite build && gh-pages -d dist"
-```
-แล้วรัน:
-```bash
-npm run deploy
-```
